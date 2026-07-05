@@ -6,7 +6,7 @@
     <style>
         body {
             background-color: #000;
-            color: #d1cfc7; /* Bone white text */
+            color: #d1cfc7;
             font-family: monospace;
             margin: 0;
             overflow: hidden;
@@ -18,22 +18,203 @@
             flex-grow: 1;
             position: relative;
             background-color: #000;
-            box-shadow: inset 0 0 120px rgba(0,0,0,1);
+        }
+        /* The 3D Canvas sits behind the scanlines */
+        #glcanvas {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1;
         }
         .scanlines {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.35) 50%), 
                         linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
             background-size: 100% 4px, 3px 100%;
             pointer-events: none;
             z-index: 10;
+            box-shadow: inset 0 0 120px rgba(0,0,0,1);
         }
         #terminal-border {
             height: 200px;
-            border-top: 4px solid #4a0000; /* Stitched flesh / dried blood border */
+            border-top: 4px solid #4a0000;
             background-color: #050505;
             padding: 15px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            z-index: 20;
+        }
+        #log {
+            flex-grow: 1;
+            overflow-y: auto;
+            font-size: 18px;
+            line-height: 1.5;
+            text-shadow: 0 0 3px rgba(209, 207, 199, 0.5);
+        }
+        #prompt-line {
+            display: flex;
+            font-size: 18px;
+            margin-top: 10px;
+        }
+        #input {
+            background: none;
+            border: none;
+            color: #d1cfc7;
+            font-family: monospace;
+            font-size: 18px;
+            flex-grow: 1;
+            outline: none;
+            text-shadow: 0 0 3px rgba(209, 207, 199, 0.5);
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <div id="viewport">
+        <div id="glcanvas"></div>
+        <div class="scanlines"></div>
+    </div>
+    <div id="terminal-border">
+        <div id="log">
+            SYSTEM BOOT... OK<br>
+            MOUNTING MIRROR UNIVERSE BUFFER... OK<br>
+            WARNING: DIRECTORY CORRUPTED. USE W,A,S,D TO NAVIGATE.<br>
+        </div>
+        <div id="prompt-line">
+            <span>C:\>&nbsp;</span>
+            <input type="text" id="input" autofocus autocomplete="off">
+        </div>
+    </div>
+
+    <script>
+        // --- TERMINAL LOGIC ---
+        const input = document.getElementById('input');
+        const log = document.getElementById('log');
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playClack() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.03);
+            gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.03);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.03);
+        }
+
+        function typeWriterEffect(text, index, callback) {
+            if (index < text.length) {
+                log.innerHTML += text.charAt(index);
+                playClack();
+                log.scrollTop = log.scrollHeight;
+                let delay = Math.random() * 150 + 50; 
+                setTimeout(() => typeWriterEffect(text, index + 1, callback), delay);
+            } else {
+                log.innerHTML += '<br>';
+                if (callback) callback();
+            }
+        }
+
+        input.addEventListener('keydown', function(e) {
+            playClack();
+            if (e.key === 'Enter' && this.value.trim() !== '') {
+                const val = this.value;
+                this.value = '';
+                log.innerHTML += `C:\\> ${val}<br>`;
+                log.scrollTop = log.scrollHeight;
+                input.disabled = true;
+                setTimeout(() => {
+                    typeWriterEffect("> THE ARCHITECTURE IS WATCHING YOU.", 0, () => {
+                        input.disabled = false;
+                        input.focus();
+                    });
+                }, 1200);
+            }
+        });
+
+        // --- 3D ENVIRONMENT LOGIC ---
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x000000, 0.08); // Thick black fog to swallow the light
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / (window.innerHeight - 200), 0.1, 1000);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: false }); // Antialias off for harsher pixel look
+        renderer.setSize(window.innerWidth, window.innerHeight - 200);
+        document.getElementById('glcanvas').appendChild(renderer.domElement);
+
+        // The Torch (Anchored to the camera)
+        const torchLight = new THREE.PointLight(0xff5500, 2, 15);
+        camera.add(torchLight);
+        scene.add(camera);
+
+        // Blood-Red Sand (Ground Plane)
+        const groundGeo = new THREE.PlaneGeometry(100, 100);
+        const groundMat = new THREE.MeshPhongMaterial({ color: 0x3a0000, flatShading: true });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        scene.add(ground);
+
+        // 8-Bit Mud/Cobblestone Building (Basic primitive structure)
+        const buildGeo = new THREE.BoxGeometry(10, 10, 10);
+        const buildMat = new THREE.MeshPhongMaterial({ color: 0x221c14, flatShading: true });
+        const building = new THREE.Mesh(buildGeo, buildMat);
+        building.position.set(0, 5, -20);
+        scene.add(building);
+
+        camera.position.y = 2; // Player eye level
+
+        // WASD Movement State
+        const moveState = { w: false, a: false, s: false, d: false };
+        const speed = 0.08;
+
+        document.addEventListener('keydown', (e) => {
+            if(document.activeElement === input) return; // Don't move if typing in terminal
+            const key = e.key.toLowerCase();
+            if(moveState.hasOwnProperty(key)) moveState[key] = true;
+        });
+        document.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            if(moveState.hasOwnProperty(key)) moveState[key] = false;
+        });
+
+        // Ensure clicking the canvas takes focus away from the terminal to allow movement
+        document.getElementById('glcanvas').addEventListener('click', () => {
+            input.blur();
+        });
+
+        // Render Loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Smooth but deliberate movement
+            if(moveState.w) camera.position.z -= speed;
+            if(moveState.s) camera.position.z += speed;
+            if(moveState.a) camera.position.x -= speed;
+            if(moveState.d) camera.position.x += speed;
+
+            // Slight torch flicker effect
+            torchLight.intensity = 1.8 + Math.random() * 0.4;
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Handle window resizing
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / (window.innerHeight - 200);
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight - 200);
+        });
+    </script>
+</body>
+</html>
             box-sizing: border-box;
             display: flex;
             flex-direction: column;
