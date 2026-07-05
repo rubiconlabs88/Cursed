@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cursed: Exemplar Rubicon</title>
+    <style>
+        body {
+            background-color: #000;
+            color: #d1cfc7; /* Bone white text */
+            font-family: monospace;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        #viewport {
+            flex-grow: 1;
+            position: relative;
+            background-color: #000;
+            box-shadow: inset 0 0 120px rgba(0,0,0,1);
+        }
+        .scanlines {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 3px 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        #terminal-border {
+            height: 200px;
+            border-top: 4px solid #4a0000; /* Stitched flesh / dried blood border */
+            background-color: #050505;
+            padding: 15px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            z-index: 20;
+        }
+        #log {
+            flex-grow: 1;
+            overflow-y: auto;
+            font-size: 18px;
+            line-height: 1.5;
+            text-shadow: 0 0 3px rgba(209, 207, 199, 0.5);
+        }
+        #prompt-line {
+            display: flex;
+            font-size: 18px;
+            margin-top: 10px;
+        }
+        #input {
+            background: none;
+            border: none;
+            color: #d1cfc7;
+            font-family: monospace;
+            font-size: 18px;
+            flex-grow: 1;
+            outline: none;
+            text-shadow: 0 0 3px rgba(209, 207, 199, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div id="viewport">
+        <div class="scanlines"></div>
+    </div>
+    <div id="terminal-border">
+        <div id="log">
+            SYSTEM BOOT... OK<br>
+            MOUNTING MIRROR UNIVERSE BUFFER... OK<br>
+            WARNING: DIRECTORY CORRUPTED. UNKNOWN ENTITY DETECTED.<br>
+        </div>
+        <div id="prompt-line">
+            <span>C:\>&nbsp;</span>
+            <input type="text" id="input" autofocus autocomplete="off">
+        </div>
+    </div>
+
+    <script>
+        const input = document.getElementById('input');
+        const log = document.getElementById('log');
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        // Mechanical keyboard clack simulator
+        function playClack() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.03);
+            
+            gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.03);
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.03);
+        }
+
+        // Hostile AI typewriter effect
+        function typeWriterEffect(text, index, callback) {
+            if (index < text.length) {
+                log.innerHTML += text.charAt(index);
+                playClack(); // AI typing sound
+                log.scrollTop = log.scrollHeight;
+                
+                // Agonizingly slow, unpredictable pacing
+                let delay = Math.random() * 150 + 50; 
+                setTimeout(() => typeWriterEffect(text, index + 1, callback), delay);
+            } else {
+                log.innerHTML += '<br>';
+                if (callback) callback();
+            }
+        }
+
+        input.addEventListener('keydown', function(e) {
+            playClack();
+            if (e.key === 'Enter') {
+                const val = this.value;
+                this.value = '';
+                log.innerHTML += `C:\\> ${val}<br>`;
+                log.scrollTop = log.scrollHeight;
+                
+                // Disable input while AI "thinks"
+                input.disabled = true;
+                
+                setTimeout(() => {
+                    typeWriterEffect("> THE ARCHITECTURE IS WATCHING YOU.", 0, () => {
+                        input.disabled = false;
+                        input.focus();
+                    });
+                }, 1200);
+            }
+        });
+    </script>
+</body>
+</html>
+
